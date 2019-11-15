@@ -1,3 +1,5 @@
+require 'pry'
+
 module Pod
   module Generate
     # Responsible for creating a workspace for a single specification,
@@ -111,6 +113,7 @@ module Pod
             native_app_target
           end
           .tap do
+
             app_project.recreate_user_schemes do |scheme, target|
               installation_result = installation_result_from_target(target)
               next unless installation_result
@@ -202,7 +205,7 @@ module Pod
             Xcodeproj::XCScheme.share_scheme(installer.pods_project.path, pod_target.label)
           end
 
-          add_test_spec_schemes_to_app_scheme(installer, app_project)
+          add_spec_schemes_to_app_scheme(installer, app_project)
         end
 
         app_project.save
@@ -222,8 +225,8 @@ module Pod
         native_target.build_phases.delete(script_phase)
       end
 
-      def add_test_spec_schemes_to_app_scheme(installer, app_project)
-        test_native_targets =
+      def add_spec_schemes_to_app_scheme(installer, app_project)
+        installation_targets = 
           if installer.respond_to?(:target_installation_results) # CocoaPods >= 1.6
             installer
               .target_installation_results
@@ -236,6 +239,9 @@ module Pod
               .pod_targets
               .select { |pod_target| pod_target.pod_name == spec.root.name }
           end
+
+        test_native_targets =
+          installation_targets
           .flat_map(&:test_native_targets)
           .group_by(&:platform_name)
 
@@ -243,6 +249,23 @@ module Pod
           { 'IDEWorkspaceSharedSettings_AutocreateContextsIfNeeded' => false },
           app_project.path.sub_ext('.xcworkspace').join('xcshareddata').tap(&:mkpath).join('WorkspaceSettings.xcsettings')
         )
+
+        installation_targets.each do |installation_target|
+          target = installation_target.target
+          platform_name = installation_target.target.platform.name
+
+          app_scheme_path = Xcodeproj::XCScheme.shared_data_dir(app_project.path).join("App-#{Platform.string_name(platform_name)}.xcscheme")
+          raise "Missing app scheme for #{platform_name}: #{app_scheme_path.inspect}" unless app_scheme_path.file?
+
+          app_scheme = Xcodeproj::XCScheme.new(app_scheme_path)
+
+          binding.pry
+
+
+          # TODO: generate new scheme for the installation_target and share it
+
+          app_scheme.save!
+        end
 
         test_native_targets.each do |platform_name, test_targets|
           app_scheme_path = Xcodeproj::XCScheme.shared_data_dir(app_project.path).join("App-#{Platform.string_name(platform_name)}.xcscheme")
